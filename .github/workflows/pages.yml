@@ -3,10 +3,13 @@ name: Deploy web app
 # Publishes web/ to GitHub Pages. Geolocation needs a secure context, so the
 # app cannot be tested by opening index.html from a file:// URL — it has to be
 # served over HTTPS (or from localhost).
+# No paths filter: a path filter is evaluated against a diff, and on the push
+# that first creates a branch there isn't one, which silently skips the deploy
+# you most wanted. A Pages build is ~30s on a free Linux runner; not worth the
+# failure mode.
 on:
   push:
     branches: [main, master]
-    paths: ["web/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:

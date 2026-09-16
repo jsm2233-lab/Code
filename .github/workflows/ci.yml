@@ -15,26 +15,39 @@ concurrency:
 jobs:
   build:
     name: Build and test
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -switch /Applications/Xcode_15.4.app
-
-      - name: Cache Homebrew
-        uses: actions/cache@v4
-        with:
-          path: ~/Library/Caches/Homebrew
-          key: brew-xcodegen-${{ runner.os }}
+      # Deliberately NOT pinning an Xcode version. Homebrew installs the newest
+      # XcodeGen, which writes the newest project format, so pinning an older
+      # Xcode guarantees "the project is in a future Xcode project file format"
+      # — which is exactly how this workflow failed the first time.
+      - name: Show toolchain
+        run: |
+          sudo xcode-select -switch /Applications/Xcode.app
+          xcodebuild -version
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
       - name: Generate project
-        run: xcodegen generate
+        run: |
+          xcodegen --version
+          xcodegen generate
+
+      # Simulator names churn with every Xcode release, so pinning "iPhone 15"
+      # is a time bomb. Take whatever iPhone this runner actually has, by UDID
+      # so the name never has to be quoted or matched again.
+      - name: Pick a simulator
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available --json \
+            | python3 -c 'import json,sys;d=json.load(sys.stdin)["devices"];print(next(x["udid"] for r in sorted(d) if "iOS" in r for x in d[r] if x.get("isAvailable") and "iPhone" in x["name"]))')
+          echo "Using simulator $udid"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
 
       # Code signing is off: this job proves the code compiles, it does not
       # produce anything installable. See README for the TestFlight path.
@@ -44,7 +57,7 @@ jobs:
           xcodebuild test \
             -project StreetCollector.xcodeproj \
             -scheme StreetCollector \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
             CODE_SIGNING_ALLOWED=NO
 
       # The build log is the actual deliverable when there's no Mac to read
@@ -54,7 +67,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: |
-            ~/Library/Developer/Xcode/DerivedData/**/Logs/Build/*.xcactivitylog
+          path: ~/Library/Developer/Xcode/DerivedData/**/Logs/Build/*.xcactivitylog
           if-no-files-found: ignore
           retention-days: 7

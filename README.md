@@ -42,6 +42,21 @@ been down 68% of Baker Street".
    exploring the fiddly bits. Finishing a segment end to end pays a bonus.
    Walking pays 1.25×, collecting after midnight 1.15×.
 
+## Two builds
+
+This repo contains the app twice.
+
+- **`StreetCollector/`** — the native SwiftUI app. Full background collection,
+  which is the whole point of the design, but it needs Xcode and a Mac (or the
+  CI in `.github/workflows/ci.yml`) to build, and an Apple Developer account to
+  install.
+- **`web/`** — the same game as an installable web app. Runs on any phone with
+  no compiler and no account, but iOS suspends geolocation when the page isn't
+  in front, so it only collects while open. See `web/README.md`.
+
+The matching algorithm, scoring, thresholds and visual language are the same in
+both; the web version is a deliberate port, not a reimplementation.
+
 ## Look
 
 The app is a game about a city at night, and it's built to read that way.

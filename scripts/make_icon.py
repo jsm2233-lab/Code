@@ -4,7 +4,8 @@ Pure stdlib. Renders at 2x and box-downsamples for anti-aliasing.
 """
 import math, struct, zlib
 
-S = 1024
+import sys
+S = int(sys.argv[2]) if len(sys.argv) > 2 else 1024
 SS = 2           # supersample factor
 W = S * SS
 
@@ -48,7 +49,10 @@ def line(p0, p1, width, colour, alpha):
                 continue
             blend(px, py, colour, alpha * max(0.0, min(1.0, edge + 0.5)))
 
+K = S / 1024.0   # everything below is authored at 1024 and scaled
+
 def glow_line(p0, p1, colour, core, alpha=1.0):
+    core = core * K
     """Neon: wide haze, mid bloom, bright core, white centre."""
     for width, a in ((core * 5.0, 0.055 * alpha), (core * 2.8, 0.13 * alpha), (core * 1.6, 0.3 * alpha)):
         line(p0, p1, width * SS, colour, a)
@@ -56,7 +60,7 @@ def glow_line(p0, p1, colour, core, alpha=1.0):
     line(p0, p1, core * 0.3 * SS, (255, 255, 255), 0.75 * alpha)
 
 def dim_line(p0, p1, core):
-    line(p0, p1, core * SS, (0x55, 0x66, 0x78), 0.42)
+    line(p0, p1, core * K * SS, (0x55, 0x66, 0x78), 0.42)
 
 U = W / 9.0   # grid unit
 def P(cx, cy): return (cx * U, cy * U)
@@ -86,9 +90,9 @@ for i in range(len(route) - 1):
 # --- The player: a glowing dot at the head of the route.
 hx, hy = route[-1]
 for radius, a in ((150, 0.10), (96, 0.18), (58, 0.40)):
-    line((hx, hy), (hx, hy), radius * SS, MINT, a)
-line((hx, hy), (hx, hy), 40 * SS, MINT, 1.0)
-line((hx, hy), (hx, hy), 17 * SS, (255, 255, 255), 0.95)
+    line((hx, hy), (hx, hy), radius * K * SS, MINT, a)
+line((hx, hy), (hx, hy), 40 * K * SS, MINT, 1.0)
+line((hx, hy), (hx, hy), 17 * K * SS, (255, 255, 255), 0.95)
 
 # --- Downsample and write.
 out = bytearray(S * S * 3)
@@ -116,6 +120,5 @@ png = (b"\x89PNG\r\n\x1a\n"
        + chunk(b"IDAT", zlib.compress(bytes(raw), 9))
        + chunk(b"IEND", b""))
 
-import sys
 open(sys.argv[1] if len(sys.argv) > 1 else "icon-1024.png", "wb").write(png)
 print("wrote", sys.argv[1], len(png), "bytes")

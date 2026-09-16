@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Street Collector — smoke test</title>
+<link rel="stylesheet" href="../app.css">
+<script>
+  // Collect anything that would be a broken app in a real browser.
+  window.__errors = [];
+  window.addEventListener("error", (e) => window.__errors.push(String(e.message)));
+  window.addEventListener("unhandledrejection", (e) => window.__errors.push("promise: " + e.reason));
+  const realError = console.error;
+  console.error = (...args) => { window.__errors.push(args.join(" ")); realError(...args); };
+</script>
+<script src="leaflet-stub.js"></script>
+</head>
+<body>
+<!-- Mirrors index.html exactly; kept in sync by tests/check-smoke-markup.mjs. -->
+<div id="markup-host"></div>
+<script type="module">
+  const response = await fetch("../index.html");
+  const html = await response.text();
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+
+  for (const node of parsed.body.children) {
+    if (node.tagName === "SCRIPT") continue;
+    document.body.appendChild(document.importNode(node, true));
+  }
+  document.getElementById("markup-host").remove();
+
+  // Seeded state, so the screens render with content rather than empty states.
+  localStorage.setItem("sc.onboarded", "true");
+  localStorage.setItem("sc.profile", JSON.stringify({
+    xp: 4200, totalDistance: 48000, totalNewStreetMetres: 21000,
+    segmentsCompleted: 37, currentStreak: 5, longestStreak: 9,
+    lastCollectionDay: new Date().toISOString(), unlocked: ["first.street", "streets.25", "streak.3"],
+    homeTile: null,
+  }));
+
+  try {
+    await import("../js/app.js");
+    window.__booted = true;
+  } catch (error) {
+    window.__errors.push("import: " + (error && error.stack ? error.stack : error));
+  }
+
+  // Report into the DOM, so `--dump-dom` can see it without a debugger.
+  setTimeout(() => {
+    const report = document.createElement("pre");
+    report.id = "smoke-report";
+    report.textContent = window.__errors.length
+      ? "SMOKE:FAIL\n" + window.__errors.join("\n")
+      : "SMOKE:OK booted=" + Boolean(window.__booted) +
+        " hudEl=" + Boolean(document.getElementById("hud")) +
+        " hudHTML=" + (document.getElementById("hud")?.innerHTML.length || 0) +
+        " hud=" + document.querySelectorAll(".level-badge").length +
+        " tabs=" + document.querySelectorAll("#tabbar button").length +
+        " canvas=" + document.querySelectorAll(".sc-coverage-canvas").length +
+        " idb=" + (typeof indexedDB);
+    document.body.appendChild(report);
+  }, 2500);
+</script>
+</body>
+</html>

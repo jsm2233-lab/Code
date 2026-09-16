@@ -1,0 +1,10 @@
+{
+  "name": "street-collector-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Street Collector as an installable web app. No build step and no dependencies; package.json exists so Node treats the modules as ESM when running the tests.",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run.mjs"
+  }
+}

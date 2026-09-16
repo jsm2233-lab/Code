@@ -4,6 +4,11 @@ import Foundation
 ///
 /// GeoJSON for the collected streets (opens in anything), GPX for individual
 /// trips (imports into Strava, Garmin, Komoot).
+///
+/// Main-actor isolated because it reads straight out of the stores, which are.
+/// Exports are user-initiated from a view and small enough that doing the work
+/// on the main actor costs nothing worth reclaiming.
+@MainActor
 enum ExportService {
 
     static func geoJSON(

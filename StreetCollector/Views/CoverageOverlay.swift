@@ -64,8 +64,8 @@ struct CoverageSnapshot {
 /// tens of thousands of overlay objects makes MapKit crawl, while a single
 /// renderer draws only what's on screen.
 final class CoverageOverlay: NSObject, MKOverlay {
-    var coordinate: CLLocationCoordinate2D { MKMapPoint(x: MKMapRectWorld.midX, y: MKMapRectWorld.midY).coordinate }
-    var boundingMapRect: MKMapRect { MKMapRectWorld }
+    var coordinate: CLLocationCoordinate2D { MKMapPoint(x: MKMapRect.world.midX, y: MKMapRect.world.midY).coordinate }
+    var boundingMapRect: MKMapRect { MKMapRect.world }
 }
 
 final class CoverageOverlayRenderer: MKOverlayRenderer {
@@ -175,8 +175,8 @@ final class CoverageOverlayRenderer: MKOverlayRenderer {
 /// streets you have. This is the "collection" made visible: a black city that
 /// lights up street by street.
 final class FogOverlay: NSObject, MKOverlay {
-    var coordinate: CLLocationCoordinate2D { MKMapPoint(x: MKMapRectWorld.midX, y: MKMapRectWorld.midY).coordinate }
-    var boundingMapRect: MKMapRect { MKMapRectWorld }
+    var coordinate: CLLocationCoordinate2D { MKMapPoint(x: MKMapRect.world.midX, y: MKMapRect.world.midY).coordinate }
+    var boundingMapRect: MKMapRect { MKMapRect.world }
 }
 
 final class FogOverlayRenderer: MKOverlayRenderer {

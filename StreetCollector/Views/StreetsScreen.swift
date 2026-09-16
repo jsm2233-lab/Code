@@ -1,6 +1,10 @@
 import SwiftUI
 
 /// The collection book: every street you've been down, grouped by name.
+///
+/// Built from a `ScrollView` of cards rather than a `List`, because a plain
+/// inset-grouped list is the one thing guaranteed to make a game look like a
+/// settings screen.
 struct StreetsScreen: View {
 
     @EnvironmentObject private var coverage: CoverageStore
@@ -16,6 +20,14 @@ struct StreetsScreen: View {
         case partial = "In progress"
 
         var id: String { rawValue }
+
+        var symbol: String {
+            switch self {
+            case .all: return "square.stack.3d.up.fill"
+            case .complete: return "checkmark.seal.fill"
+            case .partial: return "circle.lefthalf.filled"
+            }
+        }
     }
 
     enum SortOrder: String, CaseIterable, Identifiable {
@@ -53,42 +65,51 @@ struct StreetsScreen: View {
                 if coverage.touchedCount == 0 {
                     EmptyStateView(
                         symbolName: "map",
-                        title: "Nothing collected yet",
-                        message: "Start a trip on the map and every street you go down lands here."
+                        title: "The city is dark",
+                        message: "Start a trip on the map. Every street you go down lands here, and stays."
                     )
                 } else {
-                    List {
-                        Section {
-                            summaryRow
-                        }
-                        Section("\(streets.count) streets") {
+                    ScrollView {
+                        LazyVStack(spacing: 12, pinnedViews: [.sectionHeaders]) {
+                            header
+                            filterBar
+
                             ForEach(streets) { street in
                                 row(for: street)
                             }
+
+                            if streets.isEmpty {
+                                Text("Nothing matches.")
+                                    .font(Theme.body)
+                                    .foregroundStyle(.white.opacity(0.4))
+                                    .padding(.top, 40)
+                            }
                         }
+                        .padding(16)
                     }
                 }
             }
+            .cityBackground()
             .navigationTitle("Collection")
             .searchable(text: $search, prompt: "Search streets")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Picker("Filter", selection: $filter) {
-                            ForEach(Filter.allCases) { Text($0.rawValue).tag($0) }
-                        }
                         Picker("Sort", selection: $sort) {
                             ForEach(SortOrder.allCases) { Text($0.rawValue).tag($0) }
                         }
                     } label: {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        Image(systemName: "arrow.up.arrow.down.circle.fill")
+                            .foregroundStyle(Theme.accent)
                     }
                 }
             }
         }
     }
 
-    private var summaryRow: some View {
+    // MARK: - Pieces
+
+    private var header: some View {
         HStack(spacing: 12) {
             StatTile(
                 value: "\(coverage.completedCount)",
@@ -96,44 +117,90 @@ struct StreetsScreen: View {
                 symbolName: "checkmark.seal.fill"
             )
             StatTile(
-                value: "\(coverage.touchedCount - coverage.completedCount)",
+                value: "\(max(0, coverage.touchedCount - coverage.completedCount))",
                 label: "In progress",
                 symbolName: "circle.lefthalf.filled",
                 tint: Theme.partial
             )
         }
-        .listRowInsets(EdgeInsets())
-        .listRowBackground(Color.clear)
+    }
+
+    private var filterBar: some View {
+        HStack(spacing: 8) {
+            ForEach(Filter.allCases) { option in
+                let selected = filter == option
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { filter = option }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: option.symbol)
+                            .font(Theme.font(10, .bold))
+                        Text(option.rawValue)
+                            .font(Theme.font(13, .semibold))
+                    }
+                    .foregroundStyle(selected ? Theme.ink : .white.opacity(0.6))
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 8)
+                    .background {
+                        if selected {
+                            Capsule().fill(Theme.primaryGradient)
+                        } else {
+                            Capsule().fill(.white.opacity(0.06))
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
     }
 
     private func row(for street: CollectedStreet) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Image(systemName: street.isFullyCollected ? "checkmark.seal.fill" : "circle.lefthalf.filled")
-                    .foregroundStyle(street.isFullyCollected ? Theme.collected : Theme.partial)
-                Text(street.name)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-                Spacer()
-                Text(Format.percent(street.fraction))
-                    .font(.caption.weight(.semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+        let tint = street.isFullyCollected ? Theme.collected : Theme.partial
+
+        return GlassPanel(tint: tint) {
+            HStack(spacing: 14) {
+                ZStack {
+                    ProgressRing(fraction: street.fraction, lineWidth: 4, tint: tint)
+                    Image(systemName: street.isFullyCollected ? "checkmark" : "figure.walk")
+                        .font(Theme.font(13, .bold))
+                        .foregroundStyle(tint)
+                }
+                .frame(width: 42, height: 42)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(street.name)
+                        .font(Theme.font(15, .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        Text(street.classification.displayName)
+                            .font(Theme.font(10, .bold))
+                            .foregroundStyle(Theme.classificationColor(street.classification))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(
+                                Theme.classificationColor(street.classification).opacity(0.14),
+                                in: Capsule()
+                            )
+                        Text(Format.distance(street.metresCovered))
+                            .font(Theme.numeric(11, .semibold))
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(Format.percent(street.fraction))
+                        .font(Theme.numeric(15, .heavy))
+                        .foregroundStyle(tint)
+                    Text(Format.relative(street.lastSeen))
+                        .font(Theme.font(10, .medium))
+                        .foregroundStyle(.white.opacity(0.35))
+                }
             }
-            LinearProgress(
-                fraction: street.fraction,
-                tint: street.isFullyCollected ? Theme.collected : Theme.partial
-            )
-            HStack {
-                Text(street.classification.displayName)
-                Text("·")
-                Text(Format.distance(street.metresCovered))
-                Spacer()
-                Text(Format.relative(street.lastSeen))
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
     }
 }

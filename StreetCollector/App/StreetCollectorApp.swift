@@ -18,7 +18,7 @@ struct StreetCollectorApp: App {
                 .environmentObject(environment.location)
                 .environmentObject(environment.notifications)
                 .environmentObject(environment.settings)
-                .preferredColorScheme(environment.settings.mapStyle == .dark ? .dark : nil)
+                .preferredColorScheme(.dark)
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {

@@ -42,6 +42,36 @@ been down 68% of Baker Street".
    exploring the fiddly bits. Finishing a segment end to end pays a bonus.
    Walking pays 1.25×, collecting after midnight 1.15×.
 
+## Look
+
+The app is a game about a city at night, and it's built to read that way.
+
+- **One dark palette, three signal colours.** Mint means collected, amber means
+  in progress, cyan means happening right now. Nothing else is allowed to use
+  them. Everything is set in SF Rounded — the cheapest single decision that
+  stops a map app reading as a spreadsheet.
+- **Neon streets.** Collected streets are drawn as three stacked strokes — a
+  wide haze, a mid bloom, a bright core — which fakes a convincing neon glow at
+  a fraction of the cost of a real blur. Finished streets get a white-hot centre
+  line so they're unmistakable from nearly-finished ones. Uncollected streets
+  are barely there: a suggestion of a grid waiting to be lit.
+- **Fog of war** dims everywhere you haven't been and cuts a soft-edged corridor
+  along everywhere you have, by stacking destination-out strokes at decreasing
+  width and increasing opacity.
+- **The player dot** is a mint core with a halo that breathes while a trip is
+  running, replacing MapKit's blue dot.
+- **Celebrations** for level-ups and badges: a `Canvas`-drawn confetti burst (one
+  canvas, ~90 particles, not 90 SwiftUI views) behind a gradient medal. Always
+  tap-to-dismiss and auto-closing after 4.5s, because this fires while people are
+  driving.
+- **Badges** are gradient-filled and glowing when unlocked, desaturated with
+  visible progress when not, and shimmer once they pass 75% — the "nearly there"
+  nudge, applied to nothing else.
+
+The app icon is generated procedurally by a stdlib-only Python script
+(`scripts/make_icon.py`): a lit route turning through a dim street grid, in the
+same palette.
+
 ## Features
 
 - Live map with collected streets lit, partial progress in amber, and an

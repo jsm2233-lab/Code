@@ -23,6 +23,7 @@ struct StatsScreen: View {
                 }
                 .padding(16)
             }
+            .cityBackground()
             .navigationTitle("Stats")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -30,7 +31,8 @@ struct StatsScreen: View {
                         Button("Export collected streets (GeoJSON)") { export(completedOnly: true) }
                         Button("Export all coverage (GeoJSON)") { export(completedOnly: false) }
                     } label: {
-                        Image(systemName: "square.and.arrow.up")
+                        Image(systemName: "square.and.arrow.up.circle.fill")
+                            .foregroundStyle(Theme.accent)
                     }
                 }
             }
@@ -42,38 +44,81 @@ struct StatsScreen: View {
 
     // MARK: - Cards
 
+    /// Hero card. The level ring is the single biggest thing on the screen
+    /// because levelling is the spine the rest of the scoring hangs off.
     private var levelCard: some View {
-        Card {
-            HStack(spacing: 16) {
-                ZStack {
-                    ProgressRing(fraction: game.profile.levelProgress, lineWidth: 10)
-                    VStack(spacing: 0) {
-                        Text("\(game.profile.level)")
-                            .font(.title.weight(.heavy))
-                            .monospacedDigit()
-                        Text("LEVEL")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.secondary)
+        GlassPanel(tint: Theme.accent, glow: true) {
+            VStack(spacing: 18) {
+                HStack(spacing: 20) {
+                    ZStack {
+                        ProgressRing(fraction: game.profile.levelProgress, lineWidth: 9, gradient: Theme.primaryGradient)
+                        VStack(spacing: -4) {
+                            Text("\(game.profile.level)")
+                                .font(Theme.numeric(36, .heavy))
+                                .foregroundStyle(.white)
+                            Text("LEVEL")
+                                .font(Theme.font(8, .heavy))
+                                .tracking(2)
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                    }
+                    .frame(width: 96, height: 96)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(game.profile.levelTitle)
+                            .font(Theme.title)
+                            .foregroundStyle(.white)
+                            .minimumScaleFactor(0.7)
+                            .lineLimit(1)
+
+                        Text("\(Format.xp(game.profile.xp)) XP")
+                            .font(Theme.numeric(14, .bold))
+                            .foregroundStyle(Theme.accent)
+
+                        LinearProgress(fraction: game.profile.levelProgress, gradient: Theme.primaryGradient, height: 7)
+                            .shimmering()
+
+                        Text("\(Format.xp(max(0, game.profile.xpForNextLevel - game.profile.xpIntoLevel))) XP to level \(game.profile.level + 1)")
+                            .font(Theme.font(10, .medium))
+                            .foregroundStyle(.white.opacity(0.4))
                     }
                 }
-                .frame(width: 86, height: 86)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(game.profile.levelTitle)
-                        .font(.title3.weight(.bold))
-                    Text("\(Format.xp(game.profile.xp)) XP total")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                    HStack(spacing: 10) {
-                        Label("\(game.profile.currentStreakDays)d streak", systemImage: "flame.fill")
-                        Label("\(game.profile.longestStreakDays)d best", systemImage: "trophy.fill")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 10) {
+                    streakChip(
+                        value: "\(game.profile.currentStreakDays)",
+                        label: "day streak",
+                        symbol: "flame.fill",
+                        gradient: Theme.streakGradient
+                    )
+                    streakChip(
+                        value: "\(game.profile.longestStreakDays)",
+                        label: "best ever",
+                        symbol: "trophy.fill",
+                        gradient: Theme.gradient(for: .gold)
+                    )
                 }
             }
         }
+    }
+
+    private func streakChip(value: String, label: String, symbol: String, gradient: LinearGradient) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(Theme.font(13, .bold))
+                .foregroundStyle(gradient)
+            Text(value)
+                .font(Theme.numeric(16, .heavy))
+                .foregroundStyle(.white)
+            Text(label.uppercased())
+                .font(Theme.font(9, .bold))
+                .tracking(0.8)
+                .foregroundStyle(.white.opacity(0.4))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     /// Per-tile completion. Tiles are the closest thing the app has to
@@ -85,26 +130,30 @@ struct StatsScreen: View {
             .sorted { $0.fraction > $1.fraction }
             .prefix(12)
 
-        return Card(title: "Areas") {
+        return Card(title: "Areas", symbol: "square.grid.2x2.fill") {
             if completions.isEmpty {
                 Text("Move around to load street data for your area.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.body)
+                    .foregroundStyle(.white.opacity(0.5))
             } else {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
                     ForEach(Array(completions)) { completion in
                         VStack(spacing: 6) {
                             ZStack {
-                                ProgressRing(fraction: completion.fraction, lineWidth: 5)
+                                ProgressRing(
+                                    fraction: completion.fraction,
+                                    lineWidth: 5,
+                                    tint: completion.fraction >= 1 ? Theme.violet : Theme.accent,
+                                    gradient: completion.fraction >= 1 ? Theme.legendaryGradient : Theme.primaryGradient
+                                )
                                 Text("\(Int(completion.percent))")
-                                    .font(.caption2.weight(.bold))
-                                    .monospacedDigit()
+                                    .font(Theme.numeric(12, .heavy))
+                                    .foregroundStyle(.white)
                             }
-                            .frame(width: 46, height: 46)
+                            .frame(width: 48, height: 48)
                             Text("\(completion.completed)/\(completion.total)")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
+                                .font(Theme.numeric(9, .semibold))
+                                .foregroundStyle(.white.opacity(0.4))
                         }
                     }
                 }
@@ -114,11 +163,11 @@ struct StatsScreen: View {
 
     private var activityChart: some View {
         let daily = trips.dailyNewMetres(days: 30)
-        return Card(title: "New streets, last 30 days") {
+        return Card(title: "New streets, last 30 days", symbol: "chart.bar.fill", tint: Theme.hot) {
             if daily.allSatisfy({ $0.metres == 0 }) {
                 Text("No trips yet.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.body)
+                    .foregroundStyle(.white.opacity(0.5))
             } else {
                 Chart {
                     ForEach(daily, id: \.date) { entry in
@@ -126,8 +175,8 @@ struct StatsScreen: View {
                             x: .value("Day", entry.date, unit: .day),
                             y: .value("New km", entry.metres / 1_000)
                         )
-                        .foregroundStyle(Theme.accent.gradient)
-                        .cornerRadius(2)
+                        .foregroundStyle(Theme.primaryGradient)
+                        .cornerRadius(3)
                     }
                 }
                 .chartYAxis {
@@ -174,11 +223,11 @@ struct StatsScreen: View {
     }
 
     private var tripsCard: some View {
-        Card(title: "Recent trips") {
+        Card(title: "Recent trips", symbol: "figure.walk.motion", tint: Theme.partial) {
             if trips.trips.isEmpty {
                 Text("Your finished trips show up here.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.body)
+                    .foregroundStyle(.white.opacity(0.5))
             } else {
                 VStack(spacing: 0) {
                     ForEach(trips.trips.prefix(5)) { trip in
@@ -189,15 +238,24 @@ struct StatsScreen: View {
                         }
                         .buttonStyle(.plain)
                         if trip.id != trips.trips.prefix(5).last?.id {
-                            Divider().padding(.vertical, 8)
+                            Divider()
+                                .overlay(.white.opacity(0.06))
+                                .padding(.vertical, 10)
                         }
                     }
                     if trips.trips.count > 5 {
-                        NavigationLink("See all \(trips.trips.count) trips") {
+                        NavigationLink {
                             TripsScreen()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text("See all \(trips.trips.count) trips")
+                                Image(systemName: "chevron.right")
+                                    .font(Theme.font(10, .bold))
+                            }
+                            .font(Theme.font(13, .bold))
+                            .foregroundStyle(Theme.accent)
                         }
-                        .font(.footnote)
-                        .padding(.top, 12)
+                        .padding(.top, 14)
                     }
                 }
             }
@@ -219,25 +277,32 @@ struct TripRow: View {
     let trip: Trip
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 13) {
             Image(systemName: trip.mode.symbolName)
-                .font(.title3)
-                .foregroundStyle(Theme.accent)
-                .frame(width: 30)
+                .font(Theme.font(15, .bold))
+                .foregroundStyle(Theme.ink)
+                .frame(width: 36, height: 36)
+                .background(Theme.primaryGradient, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(trip.startedAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.subheadline.weight(.medium))
-                Text("\(Format.distance(trip.distanceMetres)) · \(Format.distance(trip.newStreetMetres)) new · \(trip.completedSegmentIDs.count) collected")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.font(14, .bold))
+                    .foregroundStyle(.white)
+
+                HStack(spacing: 8) {
+                    Label(Format.distance(trip.distanceMetres), systemImage: "arrow.forward")
+                    Label(Format.distance(trip.newStreetMetres), systemImage: "sparkles")
+                    Label("\(trip.completedSegmentIDs.count)", systemImage: "checkmark.seal.fill")
+                }
+                .font(Theme.numeric(10, .semibold))
+                .foregroundStyle(.white.opacity(0.45))
+                .labelStyle(.titleAndIcon)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
             Text("+\(Format.xp(trip.xpEarned))")
-                .font(.caption.weight(.bold))
-                .monospacedDigit()
+                .font(Theme.numeric(13, .heavy))
                 .foregroundStyle(Theme.accent)
         }
     }

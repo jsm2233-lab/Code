@@ -8,6 +8,8 @@ struct MapContainerView: UIViewRepresentable {
     let snapshot: CoverageSnapshot
     let style: MapStyleOption
     let showFog: Bool
+    /// Drives the pulsing halo on the player dot.
+    let isCollecting: Bool
     @Binding var trackingMode: MKUserTrackingMode
     /// Reported after the user pans or zooms, debounced by the coordinator.
     let onRegionChange: (MKCoordinateRegion) -> Void
@@ -42,6 +44,7 @@ struct MapContainerView: UIViewRepresentable {
         context.coordinator.coverageRenderer?.update(snapshot)
         context.coordinator.fogRenderer?.update(showFog ? snapshot : .empty)
         context.coordinator.setFogHidden(!showFog)
+        context.coordinator.setCollecting(isCollecting)
 
         if map.userTrackingMode != trackingMode {
             map.setUserTrackingMode(trackingMode, animated: true)
@@ -95,6 +98,19 @@ struct MapContainerView: UIViewRepresentable {
 
         func setFogHidden(_ hidden: Bool) {
             fogRenderer?.alpha = hidden ? 0 : 1
+        }
+
+        func setCollecting(_ collecting: Bool) {
+            guard let mapView,
+                  let view = mapView.view(for: mapView.userLocation) as? PlayerAnnotationView else { return }
+            view.setPulsing(collecting)
+        }
+
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            guard annotation is MKUserLocation else { return nil }
+            let view = PlayerAnnotationView(annotation: annotation, reuseIdentifier: "player")
+            view.setPulsing(parent.isCollecting)
+            return view
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -151,5 +167,68 @@ struct MapContainerView: UIViewRepresentable {
         ) -> Bool {
             true
         }
+    }
+}
+
+/// The player dot: a mint core with a halo that breathes while a trip is
+/// running. MapKit's default blue dot is fine; it just isn't this app.
+final class PlayerAnnotationView: MKAnnotationView {
+
+    private let halo = CAShapeLayer()
+    private let core = CAShapeLayer()
+    private static let pulseKey = "collecting.pulse"
+
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        frame = CGRect(x: 0, y: 0, width: 26, height: 26)
+        // Keep it under the callout and off the hit-testing path; it is
+        // decoration, not a target.
+        isEnabled = false
+
+        let mint = UIColor(red: 0.176, green: 0.878, blue: 0.647, alpha: 1)
+
+        halo.path = UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: 26, height: 26)).cgPath
+        halo.fillColor = mint.withAlphaComponent(0.25).cgColor
+        halo.position = .zero
+        layer.addSublayer(halo)
+
+        core.path = UIBezierPath(ovalIn: CGRect(x: 7, y: 7, width: 12, height: 12)).cgPath
+        core.fillColor = mint.cgColor
+        core.strokeColor = UIColor.white.withAlphaComponent(0.9).cgColor
+        core.lineWidth = 2.5
+        core.shadowColor = mint.cgColor
+        core.shadowOpacity = 0.9
+        core.shadowRadius = 6
+        core.shadowOffset = .zero
+        layer.addSublayer(core)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setPulsing(_ pulsing: Bool) {
+        guard pulsing else {
+            halo.removeAnimation(forKey: Self.pulseKey)
+            halo.opacity = 0.35
+            halo.transform = CATransform3DIdentity
+            return
+        }
+        guard halo.animation(forKey: Self.pulseKey) == nil else { return }
+
+        let scale = CABasicAnimation(keyPath: "transform.scale")
+        scale.fromValue = 0.8
+        scale.toValue = 2.4
+
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0.55
+        fade.toValue = 0.0
+
+        let group = CAAnimationGroup()
+        group.animations = [scale, fade]
+        group.duration = 1.8
+        group.repeatCount = .infinity
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        halo.add(group, forKey: Self.pulseKey)
     }
 }

@@ -80,6 +80,16 @@ final class CoverageOverlayRenderer: MKOverlayRenderer {
         setNeedsDisplay()
     }
 
+    /// Signal colours, matching the SwiftUI palette exactly. Duplicated here
+    /// because `CGContext` wants `CGColor` and the renderer runs off the main
+    /// actor, where the SwiftUI `Theme` is not reachable.
+    private enum Ink {
+        static let collected = UIColor(red: 0.176, green: 0.878, blue: 0.647, alpha: 1)
+        static let partial = UIColor(red: 1.000, green: 0.737, blue: 0.239, alpha: 1)
+        static let hot = UIColor(red: 0.357, green: 0.784, blue: 1.000, alpha: 1)
+        static let uncollected = UIColor(red: 0.420, green: 0.478, blue: 0.549, alpha: 1)
+    }
+
     override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
         lock.lock()
         let current = snapshot
@@ -94,35 +104,50 @@ final class CoverageOverlayRenderer: MKOverlayRenderer {
         context.setLineJoin(.round)
 
         if current.showUncollected {
-            context.setStrokeColor(UIColor(white: 0.55, alpha: 0.35).cgColor)
-            context.setLineWidth(baseWidth * 0.7)
+            // Uncollected streets are barely there — a suggestion of a grid
+            // waiting to be lit, not a second map competing with the first.
+            context.setStrokeColor(Ink.uncollected.withAlphaComponent(0.28).cgColor)
+            context.setLineWidth(baseWidth * 0.55)
             for drawable in current.drawables where drawable.coveredRuns.isEmpty {
                 guard intersects(drawable.points, mapRect) else { continue }
                 stroke(drawable.points, in: context)
             }
         }
 
+        // Three passes per lit street: a wide haze, a mid glow, then a bright
+        // core. Layering cheap strokes fakes a neon bloom convincingly and
+        // costs a fraction of a real blur.
+        let passes: [(width: CGFloat, alpha: CGFloat)] = [
+            (baseWidth * 3.6, 0.13),
+            (baseWidth * 1.9, 0.30),
+            (baseWidth, 1.0),
+        ]
+
         for drawable in current.drawables where !drawable.coveredRuns.isEmpty {
             guard intersects(drawable.points, mapRect) else { continue }
 
             let colour: UIColor
             if drawable.isHot {
-                colour = UIColor(red: 0.36, green: 0.74, blue: 1.0, alpha: 0.95)
+                colour = Ink.hot
             } else if drawable.isComplete {
-                colour = UIColor(red: 0.16, green: 0.83, blue: 0.62, alpha: 0.95)
+                colour = Ink.collected
             } else {
-                colour = UIColor(red: 0.99, green: 0.74, blue: 0.24, alpha: 0.9)
+                colour = Ink.partial
             }
 
-            // A soft wide pass under a crisp narrow one reads as a glow without
-            // the cost of a real blur.
-            context.setStrokeColor(colour.withAlphaComponent(0.25).cgColor)
-            context.setLineWidth(baseWidth * 2.4)
-            for run in drawable.coveredRuns { stroke(run, in: context) }
+            for pass in passes {
+                context.setStrokeColor(colour.withAlphaComponent(pass.alpha).cgColor)
+                context.setLineWidth(pass.width)
+                for run in drawable.coveredRuns { stroke(run, in: context) }
+            }
 
-            context.setStrokeColor(colour.cgColor)
-            context.setLineWidth(baseWidth)
-            for run in drawable.coveredRuns { stroke(run, in: context) }
+            // Finished streets get a white-hot centre line, so a fully
+            // collected street is unmistakable from a nearly-collected one.
+            if drawable.isComplete {
+                context.setStrokeColor(UIColor.white.withAlphaComponent(0.55).cgColor)
+                context.setLineWidth(max(0.6, baseWidth * 0.3))
+                for run in drawable.coveredRuns { stroke(run, in: context) }
+            }
         }
     }
 
@@ -171,26 +196,34 @@ final class FogOverlayRenderer: MKOverlayRenderer {
         let current = snapshot
         lock.unlock()
 
-        context.setFillColor(UIColor(white: 0.04, alpha: 0.55).cgColor)
+        context.setFillColor(UIColor(red: 0.039, green: 0.055, blue: 0.078, alpha: 0.72).cgColor)
         context.fill(rect(for: mapRect))
 
         // Clearing is a destination-out stroke, so the fog is cut away rather
-        // than painted over. Needs a transparency layer or it would punch a
-        // hole through the map tiles underneath.
+        // than painted over. Stacking a wide faint pass under a narrow opaque
+        // one gives the corridor a soft edge instead of a hard slot.
         context.setBlendMode(.destinationOut)
         context.setLineCap(.round)
         context.setLineJoin(.round)
-        context.setStrokeColor(UIColor.black.cgColor)
-        context.setLineWidth(max(18, 26 / zoomScale))
 
-        for drawable in current.drawables {
-            for run in drawable.coveredRuns where run.count > 1 {
-                context.beginPath()
-                context.move(to: point(for: run[0]))
-                for i in 1..<run.count {
-                    context.addLine(to: point(for: run[i]))
+        let passes: [(width: CGFloat, alpha: CGFloat)] = [
+            (max(44, 62 / zoomScale), 0.35),
+            (max(26, 38 / zoomScale), 0.55),
+            (max(15, 22 / zoomScale), 1.0),
+        ]
+
+        for pass in passes {
+            context.setStrokeColor(UIColor.black.withAlphaComponent(pass.alpha).cgColor)
+            context.setLineWidth(pass.width)
+            for drawable in current.drawables {
+                for run in drawable.coveredRuns where run.count > 1 {
+                    context.beginPath()
+                    context.move(to: point(for: run[0]))
+                    for i in 1..<run.count {
+                        context.addLine(to: point(for: run[i]))
+                    }
+                    context.strokePath()
                 }
-                context.strokePath()
             }
         }
 

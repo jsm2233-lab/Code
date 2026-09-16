@@ -19,32 +19,33 @@ struct StreetDetailSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     header
 
-                    Card {
-                        HStack(spacing: 16) {
+                    GlassPanel(tint: ringTint, glow: entry?.isComplete == true) {
+                        HStack(spacing: 18) {
                             ZStack {
-                                ProgressRing(fraction: entry?.fraction ?? 0, lineWidth: 9, tint: ringTint)
+                                ProgressRing(fraction: entry?.fraction ?? 0, lineWidth: 8, tint: ringTint)
                                 Text(Format.percent(entry?.fraction ?? 0))
-                                    .font(.caption.weight(.bold))
-                                    .monospacedDigit()
+                                    .font(Theme.numeric(15, .heavy))
+                                    .foregroundStyle(.white)
                             }
-                            .frame(width: 74, height: 74)
+                            .frame(width: 78, height: 78)
 
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(statusText).font(.headline)
+                                Text(statusText)
+                                    .font(Theme.headline)
+                                    .foregroundStyle(ringTint)
                                 Text("\(Format.distance((entry?.fraction ?? 0) * segment.length)) of \(Format.distance(segment.length))")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
+                                    .font(Theme.numeric(13, .semibold))
+                                    .foregroundStyle(.white.opacity(0.6))
                                 if let entry {
                                     Text("Last seen \(Format.relative(entry.lastSeen))")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .font(Theme.caption)
+                                        .foregroundStyle(.white.opacity(0.4))
                                 }
                             }
                         }
                     }
 
-                    Card(title: "Details") {
+                    Card(title: "Details", symbol: "info.circle.fill") {
                         detailRow("Type", segment.classification.displayName)
                         detailRow("Length", Format.distance(segment.length))
                         detailRow("Direction", segment.isOneWay ? "One way" : "Two way")
@@ -55,8 +56,8 @@ struct StreetDetailSheet: View {
                         }
                         if !segment.classification.countsTowardCompletion {
                             Text("Collectible, but doesn't count toward city completion.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(Theme.caption)
+                                .foregroundStyle(.white.opacity(0.4))
                         }
                     }
 
@@ -65,12 +66,14 @@ struct StreetDetailSheet: View {
                         dismiss()
                     } label: {
                         Label("Street data looks wrong — refresh", systemImage: "arrow.clockwise")
-                            .font(.footnote)
+                            .font(Theme.font(13, .semibold))
+                            .foregroundStyle(.white.opacity(0.45))
                     }
                     .padding(.top, 4)
                 }
                 .padding(16)
             }
+            .cityBackground()
             .navigationTitle("Street")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -82,12 +85,22 @@ struct StreetDetailSheet: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(segment.displayName)
-                .font(.title2.weight(.bold))
-            Text(segment.classification.displayName)
-                .font(.subheadline)
+                .font(Theme.display)
+                .foregroundStyle(.white)
+                .minimumScaleFactor(0.6)
+                .lineLimit(2)
+            Text(segment.classification.displayName.uppercased())
+                .font(Theme.micro)
+                .tracking(1.4)
                 .foregroundStyle(Theme.classificationColor(segment.classification))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(
+                    Theme.classificationColor(segment.classification).opacity(0.14),
+                    in: Capsule()
+                )
         }
     }
 
@@ -103,11 +116,14 @@ struct StreetDetailSheet: View {
 
     private func detailRow(_ label: String, _ value: String) -> some View {
         HStack {
-            Text(label).foregroundStyle(.secondary)
+            Text(label)
+                .font(Theme.body)
+                .foregroundStyle(.white.opacity(0.5))
             Spacer()
-            Text(value).monospacedDigit()
+            Text(value)
+                .font(Theme.numeric(14, .semibold))
+                .foregroundStyle(.white)
         }
-        .font(.subheadline)
     }
 }
 
@@ -134,32 +150,42 @@ struct SuggestionsSheet: View {
                         message: "Every street within a kilometre is collected, or street data hasn't loaded yet. Go further out."
                     )
                 } else {
-                    List(suggestions) { suggestion in
-                        HStack(spacing: 12) {
-                            Image(systemName: suggestion.fraction > 0 ? "circle.lefthalf.filled" : "circle")
-                                .foregroundStyle(suggestion.fraction > 0 ? Theme.partial : Theme.uncollected)
+                    ScrollView {
+                        LazyVStack(spacing: 10) {
+                            ForEach(suggestions) { suggestion in
+                                GlassPanel(tint: suggestion.fraction > 0 ? Theme.partial : Theme.uncollected) {
+                                    HStack(spacing: 13) {
+                                        Image(systemName: suggestion.fraction > 0 ? "circle.lefthalf.filled" : "circle.dashed")
+                                            .font(Theme.font(17, .bold))
+                                            .foregroundStyle(suggestion.fraction > 0 ? Theme.partial : Theme.uncollected)
 
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(suggestion.segment.displayName)
-                                    .lineLimit(1)
-                                Text("\(Format.distance(suggestion.distance)) away · \(Format.distance(suggestion.segment.length)) long")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(suggestion.segment.displayName)
+                                                .font(Theme.font(14, .bold))
+                                                .foregroundStyle(.white)
+                                                .lineLimit(1)
+                                            Text("\(Format.distance(suggestion.distance)) away · \(Format.distance(suggestion.segment.length)) long")
+                                                .font(Theme.numeric(11, .medium))
+                                                .foregroundStyle(.white.opacity(0.45))
+                                        }
 
-                            Spacer()
+                                        Spacer(minLength: 0)
 
-                            if suggestion.fraction > 0 {
-                                Text(Format.percent(suggestion.fraction))
-                                    .font(.caption.weight(.semibold))
-                                    .monospacedDigit()
-                                    .foregroundStyle(Theme.partial)
+                                        if suggestion.fraction > 0 {
+                                            Text(Format.percent(suggestion.fraction))
+                                                .font(Theme.numeric(13, .heavy))
+                                                .foregroundStyle(Theme.partial)
+                                        }
+                                    }
+                                }
                             }
                         }
+                        .padding(16)
                     }
-                    .listStyle(.plain)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .cityBackground()
             .navigationTitle("Collect next")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

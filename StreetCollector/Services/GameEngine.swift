@@ -8,6 +8,21 @@ final class GameEngine: ObservableObject {
     /// Transient, for the HUD's floating "+120 XP" popups.
     @Published private(set) var recentEvents: [ScoreEvent] = []
     @Published private(set) var pendingUnlocks: [Achievement] = []
+    /// Set when something worth interrupting the user for happens. The UI
+    /// shows it and calls `dismissCelebration`.
+    @Published var celebration: Celebration?
+
+    enum Celebration: Equatable, Identifiable {
+        case levelUp(level: Int, title: String)
+        case badge(id: String, title: String, detail: String, symbol: String, tier: Achievement.Tier)
+
+        var id: String {
+            switch self {
+            case .levelUp(let level, _): return "level-\(level)"
+            case .badge(let id, _, _, _, _): return "badge-\(id)"
+            }
+        }
+    }
 
     private let store: FileStore
     private static let fileName = "profile.json"
@@ -56,7 +71,11 @@ final class GameEngine: ObservableObject {
         let awarded = Int(xp.rounded())
         guard awarded > 0 else { return 0 }
 
+        let levelBefore = profile.level
         profile.xp += awarded
+        if profile.level > levelBefore {
+            celebration = .levelUp(level: profile.level, title: profile.levelTitle)
+        }
         profile.totalNewStreetMetres += delta.newMetres
         if delta.completedNow {
             profile.segmentsCompleted += 1
@@ -151,6 +170,15 @@ final class GameEngine: ObservableObject {
                 profile.unlockedAchievementIDs.insert(achievement.id)
                 profile.xp += achievement.tier.xpReward
                 unlocked.append(achievement)
+                // A badge outranks a level-up for the celebration slot: it is
+                // rarer and it has something to say.
+                celebration = .badge(
+                    id: achievement.id,
+                    title: achievement.title,
+                    detail: achievement.detail,
+                    symbol: achievement.symbolName,
+                    tier: achievement.tier
+                )
                 pushEvent(
                     ScoreEvent(
                         title: achievement.title,
@@ -222,6 +250,10 @@ final class GameEngine: ObservableObject {
         }
     }
 
+    func dismissCelebration() {
+        celebration = nil
+    }
+
     func consumePendingUnlocks() -> [Achievement] {
         let unlocks = pendingUnlocks
         pendingUnlocks.removeAll()
@@ -234,6 +266,7 @@ final class GameEngine: ObservableObject {
         profile = PlayerProfile()
         recentEvents.removeAll()
         pendingUnlocks.removeAll()
+        celebration = nil
         store.delete(Self.fileName)
     }
 

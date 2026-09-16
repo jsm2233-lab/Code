@@ -19,6 +19,7 @@ struct MapScreen: View {
     @State private var selectedSegment: StreetSegment?
     @State private var showSuggestions = false
     @State private var rebuildTask: Task<Void, Never>?
+    @State private var pulse = false
 
     /// Above this many segments on screen, uncollected streets stop being drawn.
     /// Past this zoom level they're a grey smear anyway, and the redraw cost is
@@ -31,6 +32,7 @@ struct MapScreen: View {
                 snapshot: snapshot,
                 style: settings.mapStyle,
                 showFog: settings.fogOfWar,
+                isCollecting: engine.isRunning,
                 trackingMode: $trackingMode,
                 onRegionChange: handleRegionChange,
                 onTap: handleTap
@@ -61,7 +63,10 @@ struct MapScreen: View {
             SuggestionsSheet()
                 .presentationDetents([.medium, .large])
         }
-        .onAppear(perform: centreOnUserIfPossible)
+        .onAppear {
+            centreOnUserIfPossible()
+            pulse = true
+        }
         .onChange(of: coverage.revision) { _, _ in scheduleRebuild() }
         .onChange(of: data.segmentCount) { _, _ in scheduleRebuild() }
         .onChange(of: settings.showUncollectedStreets) { _, _ in scheduleRebuild() }
@@ -73,41 +78,50 @@ struct MapScreen: View {
     // MARK: - Controls
 
     private var controls: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             Button {
                 showSuggestions = true
             } label: {
-                Image(systemName: "sparkle.magnifyingglass")
-                    .font(.title3)
-                    .frame(width: 48, height: 48)
-                    .background(.regularMaterial, in: Circle())
+                Image(systemName: "scope")
             }
+            .buttonStyle(GlassButtonStyle(tint: Theme.partial))
             .accessibilityLabel("Nearby streets to collect")
 
-            Spacer()
+            Spacer(minLength: 0)
 
             Button(action: toggleTrip) {
-                HStack(spacing: 8) {
+                HStack(spacing: 9) {
                     Image(systemName: engine.isRunning ? "stop.fill" : "play.fill")
                     Text(engine.isRunning ? "End trip" : "Start collecting")
-                        .fontWeight(.semibold)
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 14)
-                .background(engine.isRunning ? Color.red.opacity(0.9) : Theme.accent, in: Capsule())
-                .foregroundStyle(.white)
+            }
+            .buttonStyle(
+                NeonButtonStyle(
+                    gradient: engine.isRunning ? Theme.dangerGradient : Theme.primaryGradient,
+                    glowColor: engine.isRunning ? Theme.magenta : Theme.accent
+                )
+            )
+            .overlay(alignment: .top) {
+                // A soft ring that breathes while collecting, echoing the
+                // player dot on the map.
+                if engine.isRunning {
+                    Capsule()
+                        .strokeBorder(Theme.magenta.opacity(0.5), lineWidth: 2)
+                        .scaleEffect(pulse ? 1.12 : 1)
+                        .opacity(pulse ? 0 : 0.8)
+                        .animation(.easeOut(duration: 1.6).repeatForever(autoreverses: false), value: pulse)
+                        .allowsHitTesting(false)
+                }
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
             Button {
                 trackingMode = trackingMode == .follow ? .followWithHeading : .follow
             } label: {
                 Image(systemName: trackingMode == .followWithHeading ? "location.north.line.fill" : "location.fill")
-                    .font(.title3)
-                    .frame(width: 48, height: 48)
-                    .background(.regularMaterial, in: Circle())
             }
+            .buttonStyle(GlassButtonStyle(tint: Theme.hot))
             .accessibilityLabel("Recentre")
         }
     }
@@ -188,6 +202,9 @@ struct MapScreen: View {
 }
 
 /// Floating "+XP" toasts for things collected in the last few seconds.
+///
+/// They stack from the bottom right and fly in from the edge, which keeps them
+/// clear of the HUD and out of the way of the thumb.
 private struct ScoreEventOverlay: View {
 
     @EnvironmentObject private var game: GameEngine
@@ -196,30 +213,43 @@ private struct ScoreEventOverlay: View {
     var body: some View {
         VStack {
             Spacer()
-            VStack(alignment: .trailing, spacing: 6) {
+            VStack(alignment: .trailing, spacing: 8) {
                 ForEach(game.recentEvents) { event in
-                    HStack(spacing: 8) {
+                    HStack(spacing: 9) {
                         Image(systemName: event.symbolName)
-                            .foregroundStyle(Theme.accent)
+                            .font(Theme.font(13, .bold))
+                            .foregroundStyle(Theme.ink)
+                            .frame(width: 26, height: 26)
+                            .background(Theme.primaryGradient, in: Circle())
+
                         Text(event.title)
+                            .font(Theme.font(13, .semibold))
+                            .foregroundStyle(.white)
                             .lineLimit(1)
+
                         Text("+\(event.xp)")
-                            .fontWeight(.bold)
-                            .monospacedDigit()
+                            .font(Theme.numeric(13, .heavy))
+                            .foregroundStyle(Theme.accent)
                     }
-                    .font(.footnote)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.regularMaterial, in: Capsule())
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .padding(.leading, 6)
+                    .padding(.trailing, 14)
+                    .padding(.vertical, 6)
+                    .background(Theme.surface.opacity(0.92), in: Capsule())
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Theme.accent.opacity(0.35), lineWidth: 1))
+                    .shadow(color: Theme.accent.opacity(0.25), radius: 12, y: 4)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity).combined(with: .scale(scale: 0.8)),
+                        removal: .opacity
+                    ))
                 }
             }
             .padding(.trailing, 16)
-            .padding(.bottom, 92)
+            .padding(.bottom, 100)
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .allowsHitTesting(false)
-        .animation(.spring(duration: 0.35), value: game.recentEvents.count)
+        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: game.recentEvents.count)
         .onReceive(timer) { _ in
             game.expireEvents()
         }

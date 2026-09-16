@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// The badge case. Unlocked badges are lit and gradient-filled; locked ones are
+/// desaturated with their progress showing, and the nearly-finished ones
+/// shimmer so you can see what's within reach.
 struct AchievementsScreen: View {
 
     @EnvironmentObject private var game: GameEngine
@@ -15,12 +18,20 @@ struct AchievementsScreen: View {
             ScrollView {
                 LazyVStack(spacing: 12) {
                     header
-                    ForEach(progress) { item in
-                        row(for: item)
+
+                    ForEach(Achievement.Tier.allCases.reversed(), id: \.rawValue) { tier in
+                        let items = progress.filter { $0.achievement.tier == tier }
+                        if !items.isEmpty {
+                            tierHeading(tier, items: items)
+                            ForEach(items) { item in
+                                row(for: item)
+                            }
+                        }
                     }
                 }
                 .padding(16)
             }
+            .cityBackground()
             .navigationTitle("Badges")
             .task { refresh() }
             .onChange(of: coverage.completedCount) { _, _ in refresh() }
@@ -28,73 +39,120 @@ struct AchievementsScreen: View {
         }
     }
 
+    // MARK: - Pieces
+
     private var header: some View {
         let unlocked = progress.filter(\.isUnlocked).count
-        return Card {
-            HStack(spacing: 16) {
-                ZStack {
-                    ProgressRing(
-                        fraction: progress.isEmpty ? 0 : Double(unlocked) / Double(progress.count),
-                        lineWidth: 9
-                    )
-                    Text("\(unlocked)")
-                        .font(.title3.weight(.heavy))
-                        .monospacedDigit()
-                }
-                .frame(width: 70, height: 70)
+        let fraction = progress.isEmpty ? 0 : Double(unlocked) / Double(progress.count)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("\(unlocked) of \(progress.count) unlocked")
-                        .font(.headline)
-                    Text("Badges award bonus XP the moment they unlock.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        return GlassPanel(tint: Theme.violet, glow: unlocked > 0) {
+            HStack(spacing: 18) {
+                ZStack {
+                    ProgressRing(fraction: fraction, lineWidth: 7, tint: Theme.violet, gradient: Theme.legendaryGradient)
+                    VStack(spacing: -2) {
+                        Text("\(unlocked)")
+                            .font(Theme.numeric(24, .heavy))
+                            .foregroundStyle(.white)
+                        Text("of \(progress.count)")
+                            .font(Theme.font(9, .bold))
+                            .foregroundStyle(.white.opacity(0.4))
+                    }
+                }
+                .frame(width: 76, height: 76)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Badge case")
+                        .font(Theme.title)
+                        .foregroundStyle(.white)
+                    Text("Each one pays a lump of XP the moment it unlocks. Progress counts everything you've already collected.")
+                        .font(Theme.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
     }
 
+    private func tierHeading(_ tier: Achievement.Tier, items: [AchievementProgress]) -> some View {
+        HStack(spacing: 8) {
+            Text(tier.displayName.uppercased())
+                .font(Theme.micro)
+                .tracking(2)
+                .foregroundStyle(Theme.tierColor(tier))
+            Rectangle()
+                .fill(Theme.tierColor(tier).opacity(0.25))
+                .frame(height: 1)
+            Text("\(items.filter(\.isUnlocked).count)/\(items.count)")
+                .font(Theme.numeric(11, .bold))
+                .foregroundStyle(.white.opacity(0.35))
+        }
+        .padding(.top, 10)
+    }
+
     private func row(for item: AchievementProgress) -> some View {
         let tint = Theme.tierColor(item.achievement.tier)
-        return Card {
-            HStack(alignment: .top, spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(tint.opacity(item.isUnlocked ? 0.22 : 0.08))
-                    Image(systemName: item.achievement.symbolName)
-                        .font(.title3)
-                        .foregroundStyle(item.isUnlocked ? tint : Color.secondary.opacity(0.5))
-                }
-                .frame(width: 48, height: 48)
+        // Anything past three quarters gets a shimmer: it's the "you're nearly
+        // there" nudge, and it would be noise on everything.
+        let nearlyThere = !item.isUnlocked && item.fraction >= 0.75
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
+        return GlassPanel(tint: tint, glow: item.isUnlocked) {
+            HStack(alignment: .top, spacing: 14) {
+                medal(for: item, tint: tint)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(alignment: .firstTextBaseline) {
                         Text(item.achievement.title)
-                            .font(.subheadline.weight(.semibold))
-                        Spacer()
-                        Text(item.achievement.tier.displayName.uppercased())
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(tint)
+                            .font(Theme.font(15, .bold))
+                            .foregroundStyle(item.isUnlocked ? .white : .white.opacity(0.75))
+                        Spacer(minLength: 6)
+                        Text("+\(Format.xp(item.achievement.tier.xpReward))")
+                            .font(Theme.numeric(11, .heavy))
+                            .foregroundStyle(item.isUnlocked ? tint : .white.opacity(0.3))
                     }
+
                     Text(item.achievement.detail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .fixedSize(horizontal: false, vertical: true)
 
                     if item.isUnlocked {
-                        Label("Unlocked · +\(Format.xp(item.achievement.tier.xpReward)) XP", systemImage: "checkmark.circle.fill")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(tint)
+                        HStack(spacing: 5) {
+                            Image(systemName: "checkmark.seal.fill")
+                            Text("Unlocked")
+                        }
+                        .font(Theme.font(11, .bold))
+                        .foregroundStyle(tint)
                     } else {
-                        LinearProgress(fraction: item.fraction, tint: tint)
-                        Text(progressLabel(for: item))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
+                        VStack(alignment: .leading, spacing: 5) {
+                            LinearProgress(fraction: item.fraction, tint: tint, height: 6)
+                            Text(progressLabel(for: item))
+                                .font(Theme.numeric(10, .semibold))
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
                     }
                 }
             }
         }
-        .opacity(item.isUnlocked ? 1 : 0.92)
+        .modifier(ConditionalShimmer(active: nearlyThere))
+    }
+
+    private func medal(for item: AchievementProgress, tint: Color) -> some View {
+        ZStack {
+            Circle()
+                .fill(item.isUnlocked ? AnyShapeStyle(Theme.gradient(for: item.achievement.tier)) : AnyShapeStyle(Color.white.opacity(0.06)))
+                .frame(width: 50, height: 50)
+                .shadow(color: item.isUnlocked ? tint.opacity(0.5) : .clear, radius: 12)
+
+            Image(systemName: item.achievement.symbolName)
+                .font(Theme.font(19, .bold))
+                .foregroundStyle(item.isUnlocked ? Theme.ink : .white.opacity(0.28))
+
+            if !item.isUnlocked {
+                Circle()
+                    .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                    .frame(width: 50, height: 50)
+            }
+        }
     }
 
     private func progressLabel(for item: AchievementProgress) -> String {
@@ -104,7 +162,9 @@ struct AchievementsScreen: View {
         case .newStreetKilometres, .singleTripNewKm, .walkingKilometres:
             return String(format: "%.1f / %.0f km", value, target)
         case .tileCompletion:
-            return String(format: "%.0f%% / %.0f%%", value, target)
+            return String(format: "%.0f%% / %.0f%% of an area", value, target)
+        case .streakDays:
+            return "\(Int(value)) / \(Int(target)) days"
         default:
             return "\(Int(value)) / \(Int(target))"
         }
@@ -117,5 +177,19 @@ struct AchievementsScreen: View {
             trips: trips.trips,
             bestTileCompletion: engine.bestTileCompletionPercent()
         )
+    }
+}
+
+/// Applies the shimmer only when a badge is close, without branching the view
+/// tree (which would reset its identity and restart animations).
+private struct ConditionalShimmer: ViewModifier {
+    let active: Bool
+
+    func body(content: Content) -> some View {
+        if active {
+            content.shimmering()
+        } else {
+            content
+        }
     }
 }

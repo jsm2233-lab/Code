@@ -82,6 +82,9 @@ struct SettingsScreen: View {
                     Link("OpenStreetMap copyright", destination: URL(string: "https://www.openstreetmap.org/copyright")!)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .cityBackground()
+            .tint(Theme.accent)
             .navigationTitle("Settings")
             .confirmationDialog(
                 "Reset everything?",

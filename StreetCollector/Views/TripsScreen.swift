@@ -8,11 +8,19 @@ struct TripsScreen: View {
     var body: some View {
         List {
             ForEach(trips.trips) { trip in
-                NavigationLink {
-                    TripDetailScreen(trip: trip)
-                } label: {
-                    TripRow(trip: trip)
+                ZStack {
+                    // The chevron a NavigationLink draws would sit on top of a
+                    // card with its own trailing content, so the link is hidden
+                    // behind the row instead.
+                    NavigationLink { TripDetailScreen(trip: trip) } label: { EmptyView() }
+                        .opacity(0)
+                    GlassPanel(tint: Theme.accent) {
+                        TripRow(trip: trip)
+                    }
                 }
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
             }
             .onDelete { offsets in
                 for index in offsets {
@@ -20,6 +28,9 @@ struct TripsScreen: View {
                 }
             }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .cityBackground()
         .navigationTitle("Trips")
         .overlay {
             if trips.trips.isEmpty {
@@ -45,7 +56,12 @@ struct TripDetailScreen: View {
             VStack(spacing: 16) {
                 TripMapView(track: trip.track)
                     .frame(height: 240)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
+                            .strokeBorder(Theme.accent.opacity(0.25), lineWidth: 1)
+                    }
+                    .shadow(color: Theme.accent.opacity(0.2), radius: 16, y: 6)
 
                 HStack(spacing: 12) {
                     StatTile(value: Format.distance(trip.distanceMetres), label: "Distance", symbolName: "arrow.forward")
@@ -61,28 +77,30 @@ struct TripDetailScreen: View {
                 }
 
                 if !trip.completedSegmentIDs.isEmpty {
-                    Card(title: "Collected on this trip") {
+                    Card(title: "Collected on this trip", symbol: "checkmark.seal.fill") {
                         ForEach(trip.completedSegmentIDs.prefix(40), id: \.self) { id in
-                            HStack {
+                            HStack(spacing: 9) {
                                 Image(systemName: "checkmark.seal.fill")
+                                    .font(Theme.font(11, .bold))
                                     .foregroundStyle(Theme.collected)
-                                    .font(.caption)
                                 Text(data.segment(id: id)?.displayName ?? "Street no longer in map data")
-                                    .font(.subheadline)
+                                    .font(Theme.font(13, .medium))
+                                    .foregroundStyle(.white.opacity(0.85))
                                     .lineLimit(1)
-                                Spacer()
+                                Spacer(minLength: 0)
                             }
                         }
                         if trip.completedSegmentIDs.count > 40 {
                             Text("and \(trip.completedSegmentIDs.count - 40) more")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(Theme.caption)
+                                .foregroundStyle(.white.opacity(0.4))
                         }
                     }
                 }
             }
             .padding(16)
         }
+        .cityBackground()
         .navigationTitle(trip.mode.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -92,7 +110,8 @@ struct TripDetailScreen: View {
                           let url = ExportService.write(gpx, named: "trip-\(trip.id.uuidString).gpx") else { return }
                     shareItem = ShareItem(url: url)
                 } label: {
-                    Image(systemName: "square.and.arrow.up")
+                    Image(systemName: "square.and.arrow.up.circle.fill")
+                        .foregroundStyle(Theme.accent)
                 }
             }
         }
@@ -112,6 +131,10 @@ struct TripMapView: UIViewRepresentable {
         map.delegate = context.coordinator
         map.isUserInteractionEnabled = true
         map.pointOfInterestFilter = .excludingAll
+        map.overrideUserInterfaceStyle = .dark
+        let configuration = MKStandardMapConfiguration(elevationStyle: .flat)
+        configuration.emphasisStyle = .muted
+        map.preferredConfiguration = configuration
         return map
     }
 
@@ -139,6 +162,7 @@ struct TripMapView: UIViewRepresentable {
             renderer.strokeColor = UIColor(Theme.accent)
             renderer.lineWidth = 5
             renderer.lineCap = .round
+            renderer.lineJoin = .round
             return renderer
         }
     }

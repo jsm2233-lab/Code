@@ -101,6 +101,25 @@ Set your development team in Xcode before running on a device. Background
 location needs a real device — the simulator's location doesn't behave like a
 GPS.
 
+### Building without a Mac
+
+There is no Swift compiler on iOS, so the build has to happen on a macOS
+runner. `.github/workflows/ci.yml` generates the project and runs the tests on
+every push, and can be triggered by hand from github.com in mobile Safari
+(Actions → Build → Run workflow). Failures are readable in the job log from a
+phone; that is the edit-compile-read-errors loop without a Mac in it.
+
+Note that macOS runner minutes bill at 10x on private repos, so a free-plan
+account gets roughly 200 minutes of macOS a month. Each run is a few minutes.
+
+Getting the app *onto* a phone is a separate problem, and CI can't solve it
+without signing material: installing requires a signed build, which requires a
+paid Apple Developer account. With one, add the distribution certificate and
+provisioning profile as repository secrets, sign in the workflow and upload to
+TestFlight — after that one-time setup, pushing a commit from a phone ends with
+a new build appearing in TestFlight on the same phone. The setup itself
+realistically wants a desktop.
+
 ### Permissions
 
 The app asks for location "Always" (background collection is the whole point)

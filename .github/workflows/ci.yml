@@ -1,0 +1,60 @@
+name: Build
+
+# Manual runs matter here: this repo is usually driven from a phone, where
+# "Run workflow" in mobile Safari is the only build button available.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -switch /Applications/Xcode_15.4.app
+
+      - name: Cache Homebrew
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: brew-xcodegen-${{ runner.os }}
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      # Code signing is off: this job proves the code compiles, it does not
+      # produce anything installable. See README for the TestFlight path.
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project StreetCollector.xcodeproj \
+            -scheme StreetCollector \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            CODE_SIGNING_ALLOWED=NO
+
+      # The build log is the actual deliverable when there's no Mac to read
+      # Xcode's error list on.
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            ~/Library/Developer/Xcode/DerivedData/**/Logs/Build/*.xcactivitylog
+          if-no-files-found: ignore
+          retention-days: 7

@@ -5,7 +5,7 @@ import Foundation
 /// Used to track which fraction of a street segment has actually been driven or
 /// walked. Intervals are kept sorted and merged, so `coveredFraction` is just a
 /// sum and equality is meaningful.
-struct IntervalSet: Codable, Equatable {
+struct IntervalSet: Codable, Hashable {
 
     /// Sub-metre slivers are noise; anything shorter than this fraction of a
     /// segment gets absorbed into its neighbour rather than stored.
@@ -13,7 +13,7 @@ struct IntervalSet: Codable, Equatable {
 
     private(set) var intervals: [Interval]
 
-    struct Interval: Codable, Equatable {
+    struct Interval: Codable, Hashable {
         var lower: Double
         var upper: Double
 

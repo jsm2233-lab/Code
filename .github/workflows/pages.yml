@@ -29,10 +29,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # enablement: true turns Pages on via the API rather than requiring
-      # someone to flip it in repo settings first. It still needs the account
-      # plan to allow Pages on a private repo; if it doesn't, this step fails
-      # with that reason rather than a bare "Not Found".
+      # enablement: true is kept because it is a no-op once Pages exists, but
+      # it cannot bootstrap Pages here: the workflow's GITHUB_TOKEN may deploy
+      # to an existing Pages site and not create one ("Resource not accessible
+      # by integration"). Pages has to be switched on once by hand, under
+      # Settings -> Pages -> Source: GitHub Actions. On a private repo that
+      # option needs a paid plan; making the repo public is the free route.
       - uses: actions/configure-pages@v5
         with:
           enablement: true
